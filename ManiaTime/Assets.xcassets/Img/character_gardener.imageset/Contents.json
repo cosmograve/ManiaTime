@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "character_gardener.pdf",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

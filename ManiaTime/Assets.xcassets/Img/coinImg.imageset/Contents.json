@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "coinImg.pdf",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
