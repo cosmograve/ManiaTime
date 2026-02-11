@@ -13,7 +13,10 @@ final class MusicManager {
 
     private var player: AVAudioPlayer?
     private var currentScene: Scene?
+    private var lastRequestedScene: Scene = .menu
+
     private var isEnabled: Bool = true
+    private var pausedByAppLifecycle: Bool = false
 
     private init() {}
 
@@ -25,16 +28,20 @@ final class MusicManager {
             return
         }
 
-        if let scene = currentScene {
-            play(scene: scene, forceRestart: true)
-        }
+        pausedByAppLifecycle = false
+        play(scene: lastRequestedScene, forceRestart: true)
     }
 
     func play(scene: Scene, forceRestart: Bool = false) {
+        lastRequestedScene = scene
         currentScene = scene
 
         guard isEnabled else {
             stop()
+            return
+        }
+
+        if pausedByAppLifecycle {
             return
         }
 
@@ -63,6 +70,27 @@ final class MusicManager {
         }
     }
 
+    func pauseForAppLifecycle() {
+        pausedByAppLifecycle = true
+        player?.pause()
+    }
+
+    func resumeForAppLifecycleIfNeeded() {
+        guard pausedByAppLifecycle else { return }
+        pausedByAppLifecycle = false
+
+        guard isEnabled else {
+            stop()
+            return
+        }
+
+        if let p = player {
+            p.play()
+        } else {
+            play(scene: lastRequestedScene, forceRestart: true)
+        }
+    }
+
     func stop() {
         player?.stop()
         player = nil
@@ -76,10 +104,9 @@ final class MusicManager {
         }
 
         let exts = ["mp3", "m4a", "wav"]
-        let url = exts.compactMap { Bundle.main.url(forResource: fileName, withExtension: $0) }.first
-
-        return url
+        return exts.compactMap { Bundle.main.url(forResource: fileName, withExtension: $0) }.first
     }
+
     private func configureAudioSessionIfNeeded() throws {
         let session = AVAudioSession.sharedInstance()
 
@@ -87,10 +114,6 @@ final class MusicManager {
             try session.setCategory(.ambient, mode: .default, options: [.mixWithOthers])
         }
 
-        if !session.isOtherAudioPlaying {
-            try session.setActive(true)
-        } else {
-            try session.setActive(true)
-        }
+        try session.setActive(true)
     }
 }

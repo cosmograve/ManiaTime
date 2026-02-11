@@ -3,16 +3,13 @@ import SwiftUI
 
 final class GameScene: SKScene {
 
-    // MARK: - ViewModel
     private weak var viewModel: GameViewModel?
 
-    // MARK: - Layers
     private let backgroundLayer = SKNode()
     private let zoneLayer = SKNode()
     private let boatLayer = SKNode()
     private let characterLayer = SKNode()
 
-    // MARK: - Nodes
     private var backgroundNode: SKSpriteNode!
     private var boatNode: SKSpriteNode!
 
@@ -20,39 +17,43 @@ final class GameScene: SKScene {
     private var rightBankZone = SKShapeNode()
     private var boatZone = SKShapeNode()
 
-    // MARK: - Characters
     private var characterNodes: [UUID: SKSpriteNode] = [:]
     private var nodeIdMap: [String: UUID] = [:]
 
-    // MARK: - Drag state
     private var draggingId: UUID?
     private var draggingStartPosition: CGPoint = .zero
     private var isDragging: Bool = false
 
-    // MARK: - Animation state
     private var lastBoatSide: BankSide?
     private var isBoatSailing: Bool = false
 
-    // MARK: - Debug
     var debugShowZones: Bool = false {
         didSet { updateZoneVisibility() }
     }
 
-    // MARK: - Tuning constants
     private let texturesFaceRightByDefault: Bool = true
     private let characterTargetHeight: CGFloat = 110
+
     private let boatWidthRatio: CGFloat = 0.22
     private let bottomPadding: CGFloat = 40
     private let boatYFromBottom: CGFloat = 58
     private let boatDeckHeightRatio: CGFloat = 0.33
     private let boatSlotXRatio: CGFloat = 0.17
+
     private let sidePadding: CGFloat = 40
     private let boatSailDuration: TimeInterval = 1.0
     private let characterMoveDuration: TimeInterval = 0.28
     private let dragReturnDuration: TimeInterval = 0.20
-    private let minDistance: CGFloat = 120
 
-    // ✅ zPosition
+    private let minDistance: CGFloat = 90
+
+    private let bankSafeExtra: CGFloat = 28
+    private let bankTopSafeExtra: CGFloat = 120
+    private let bankBottomExtra: CGFloat = 110
+
+    private let rowsTargetCount: Int = 4
+    private let rowJitter: CGFloat = 10
+
     private let zPositions = ZPositions()
 
     struct ZPositions {
@@ -65,15 +66,32 @@ final class GameScene: SKScene {
         let zones: CGFloat = 100
     }
 
-    // MARK: - Stable bank positions cache
     private var cachedLeftBankPos: [UUID: CGPoint] = [:]
     private var cachedRightBankPos: [UUID: CGPoint] = [:]
     private var cachedLevelIndex: Int?
 
-    // MARK: - Stable boat slot mapping (NO swapping)
     private var boatSlotById: [UUID: Int] = [:]
 
-    // MARK: - Init
+    private var safeInsets: UIEdgeInsets = .zero
+    private var hudTopInset: CGFloat = 0
+    private var hudBottomInset: CGFloat = 0
+
+    func updateSafeArea(_ insets: UIEdgeInsets) {
+        safeInsets = insets
+        invalidateCachedBankPositions()
+    }
+
+    func updateHUDInsets(top: CGFloat, bottom: CGFloat) {
+        hudTopInset = max(0, top)
+        hudBottomInset = max(0, bottom)
+        invalidateCachedBankPositions()
+    }
+
+    private func invalidateCachedBankPositions() {
+        cachedLeftBankPos.removeAll()
+        cachedRightBankPos.removeAll()
+    }
+
     init(size: CGSize, viewModel: GameViewModel) {
         self.viewModel = viewModel
         super.init(size: size)
@@ -97,18 +115,11 @@ final class GameScene: SKScene {
         super.init(coder: coder)
     }
 
-    // MARK: - ✅ IMPORTANT FIX
-    /// Пока лодка плывёт, её frame меняется каждый кадр, а boatZone оставался на старом месте.
-    /// Обновляем boatZone каждый кадр во время плавания.
     override func update(_ currentTime: TimeInterval) {
         super.update(currentTime)
-
-        if isBoatSailing {
-            layoutBoatZone()
-        }
+        if isBoatSailing { layoutBoatZone() }
     }
 
-    // MARK: - Scene Graph
     private func setupSceneGraph() {
         addChild(backgroundLayer)
         addChild(zoneLayer)
@@ -121,7 +132,6 @@ final class GameScene: SKScene {
         zoneLayer.zPosition = zPositions.zones
     }
 
-    // MARK: - Background
     private func setupBackground() {
         let texture = SKTexture(imageNamed: "gameBackground")
         backgroundNode = SKSpriteNode(texture: texture)
@@ -130,7 +140,6 @@ final class GameScene: SKScene {
         backgroundLayer.addChild(backgroundNode)
     }
 
-    // MARK: - Boat
     private func setupBoat() {
         let texture = SKTexture(imageNamed: "boatSprite")
         boatNode = SKSpriteNode(texture: texture)
@@ -145,7 +154,6 @@ final class GameScene: SKScene {
         boatLayer.addChild(boatNode)
     }
 
-    // MARK: - Zones
     private func setupZones() {
         configureZone(leftBankZone, name: "zone_left")
         configureZone(rightBankZone, name: "zone_right")
@@ -174,7 +182,6 @@ final class GameScene: SKScene {
         boatZone.alpha = a
     }
 
-    // MARK: - Characters
     private func setupCharacters() {
         guard let vm = viewModel else { return }
 
@@ -220,7 +227,6 @@ final class GameScene: SKScene {
         return node
     }
 
-    // MARK: - Public sync
     func sync() {
         guard let vm = viewModel else { return }
 
@@ -233,8 +239,7 @@ final class GameScene: SKScene {
             characterLayer.removeAllChildren()
             characterNodes.removeAll()
             nodeIdMap.removeAll()
-            cachedLeftBankPos.removeAll()
-            cachedRightBankPos.removeAll()
+            invalidateCachedBankPositions()
             boatSlotById.removeAll()
             setupCharacters()
         }
@@ -242,12 +247,10 @@ final class GameScene: SKScene {
         applyState(vm.state, level: vm.level, animated: true)
     }
 
-    // MARK: - Apply State
     private func applyState(_ state: GameState, level: LevelDefinition, animated: Bool) {
         layoutBackground()
         layoutZones()
 
-        // ✅ order is important
         updateBoatSlots(state: state)
         updateParentingForBoatCargo(state: state)
 
@@ -276,7 +279,6 @@ final class GameScene: SKScene {
         forceFlipAllCharactersOnBanks(state: state)
     }
 
-    // MARK: - Layout background & zones
     private func layoutBackground() {
         backgroundNode.position = CGPoint(x: size.width / 2, y: size.height / 2)
         backgroundNode.size = size
@@ -285,11 +287,11 @@ final class GameScene: SKScene {
     private func layoutZones() {
         let w = size.width
         let h = size.height
-        leftBankZone.path = CGPath(rect: CGRect(x: 0, y: 0, width: w * 0.44, height: h), transform: nil)
-        rightBankZone.path = CGPath(rect: CGRect(x: w * 0.56, y: 0, width: w * 0.44, height: h), transform: nil)
+
+        leftBankZone.path = CGPath(rect: CGRect(x: 0, y: 0, width: w * 0.35, height: h), transform: nil)
+        rightBankZone.path = CGPath(rect: CGRect(x: w * 0.65, y: 0, width: w * 0.35, height: h), transform: nil)
     }
 
-    // MARK: - Boat positioning
     private func computeBoatTargetPosition(for state: GameState) -> CGPoint {
         let targetWidth = size.width * boatWidthRatio
         let texSize = boatNode.texture?.size() ?? CGSize(width: 520, height: 90)
@@ -322,14 +324,12 @@ final class GameScene: SKScene {
 
         let done = SKAction.run { [weak self] in
             self?.isBoatSailing = false
-            // ✅ В конце плавания тоже гарантированно обновим boatZone
             self?.layoutBoatZone()
         }
 
         boatNode.run(SKAction.sequence([move, done]), withKey: "boat_sail")
     }
 
-    // MARK: - Stable boat slots (NO swapping)
     private func updateBoatSlots(state: GameState) {
         for (id, _) in boatSlotById where !state.boatCargo.contains(id) {
             boatSlotById[id] = nil
@@ -352,7 +352,6 @@ final class GameScene: SKScene {
         }
     }
 
-    // MARK: - Parenting
     private func updateParentingForBoatCargo(state: GameState) {
         for (id, node) in characterNodes {
             let shouldBeOnBoat = state.boatCargo.contains(id)
@@ -369,7 +368,6 @@ final class GameScene: SKScene {
                 }
 
                 node.zPosition = (slot == 0) ? zPositions.characterInBoatSlot0 : zPositions.characterInBoatSlot1
-
             } else {
                 if node.parent !== characterLayer {
                     let worldPos = node.convert(CGPoint.zero, to: self)
@@ -386,14 +384,17 @@ final class GameScene: SKScene {
         }
     }
 
-    // MARK: - Layout characters
     private func layoutCharacters(for state: GameState, level: LevelDefinition, animated: Bool) {
-        applyBankLayout(ids: Array(state.left), bank: .left, levelIndex: level.index, animated: animated)
-        applyBankLayout(ids: Array(state.right), bank: .right, levelIndex: level.index, animated: animated)
+        let leftIds = Array(state.left)
+        let rightIds = Array(state.right)
+
+        applyBankLayout(ids: leftIds, bank: .left, levelIndex: level.index, allIdsOnBank: leftIds, animated: animated)
+        applyBankLayout(ids: rightIds, bank: .right, levelIndex: level.index, allIdsOnBank: rightIds, animated: animated)
+
         applyBoatLayout(ids: Array(state.boatCargo), animated: animated)
     }
 
-    private func applyBankLayout(ids: [UUID], bank: BankSide, levelIndex: Int, animated: Bool) {
+    private func applyBankLayout(ids: [UUID], bank: BankSide, levelIndex: Int, allIdsOnBank: [UUID], animated: Bool) {
         if bank == .left {
             for id in ids { cachedRightBankPos[id] = nil }
         } else {
@@ -404,7 +405,7 @@ final class GameScene: SKScene {
             guard let node = characterNodes[id], node.parent === characterLayer else { continue }
             if draggingId == id { continue }
 
-            let target = bankPosition(for: id, bank: bank, levelIndex: levelIndex, indexInBank: index, allIdsOnBank: ids)
+            let target = bankPosition(for: id, bank: bank, levelIndex: levelIndex, indexInBank: index, allIdsOnBank: allIdsOnBank)
             moveNode(node, to: target, animated: animated)
 
             node.zPosition = zPositions.characterOnIsland
@@ -444,7 +445,6 @@ final class GameScene: SKScene {
         }
     }
 
-    // MARK: - Stable bank positions cache
     private func bankPosition(for id: UUID, bank: BankSide, levelIndex: Int, indexInBank: Int, allIdsOnBank: [UUID]) -> CGPoint {
         if bank == .left, let cached = cachedLeftBankPos[id] { return cached }
         if bank == .right, let cached = cachedRightBankPos[id] { return cached }
@@ -457,79 +457,93 @@ final class GameScene: SKScene {
             }
         }()
 
-        let p = generateBankPoint(for: id, bank: bank, levelIndex: levelIndex, indexInBank: indexInBank, existing: existingPoints)
+        let p = generateBankPoint(
+            for: id,
+            bank: bank,
+            levelIndex: levelIndex,
+            indexInBank: indexInBank,
+            allIdsOnBank: allIdsOnBank,
+            existing: existingPoints
+        )
 
-        if bank == .left { cachedLeftBankPos[id] = p }
-        else { cachedRightBankPos[id] = p }
-
+        if bank == .left { cachedLeftBankPos[id] = p } else { cachedRightBankPos[id] = p }
         return p
     }
 
-    private func generateBankPoint(for id: UUID,
-                                   bank: BankSide,
-                                   levelIndex: Int,
-                                   indexInBank: Int,
-                                   existing: [CGPoint]) -> CGPoint {
+    private func generateBankPoint(
+        for id: UUID,
+        bank: BankSide,
+        levelIndex: Int,
+        indexInBank: Int,
+        allIdsOnBank: [UUID],
+        existing: [CGPoint]
+    ) -> CGPoint {
+
         var rng = SeededRandom(seed: stableSeed(levelIndex: levelIndex, id: id))
 
         let w = size.width
         let h = size.height
 
-        let leftRect = CGRect(x: 0, y: 0, width: w * 0.44, height: h)
-        let rightRect = CGRect(x: w * 0.56, y: 0, width: w * 0.44, height: h)
-        let zoneRect = (bank == .left) ? leftRect : rightRect
+        let leftBankRect = CGRect(x: 0, y: 0, width: w * 0.35, height: h)
+        let rightBankRect = CGRect(x: w * 0.65, y: 0, width: w * 0.35, height: h)
+        let bankRect = (bank == .left) ? leftBankRect : rightBankRect
 
-        let bandWidth = zoneRect.width * 0.55
+        let topCut = max(0, safeInsets.top) + hudTopInset + bankTopSafeExtra
+        let bottomCut = max(0, safeInsets.bottom) + hudBottomInset + bankBottomExtra
 
-        let xMinRaw: CGFloat
-        let xMaxRaw: CGFloat
+        var minY = bottomCut + bottomPadding + 30
+        var maxY = h - topCut - 8
 
-        if bank == .left {
-            xMinRaw = zoneRect.minX + sidePadding
-            xMaxRaw = zoneRect.minX + sidePadding + bandWidth
-        } else {
-            xMinRaw = zoneRect.maxX - sidePadding - bandWidth
-            xMaxRaw = zoneRect.maxX - sidePadding
+        if minY >= maxY {
+            minY = bottomPadding + 60
+            maxY = h - 140
         }
 
-        let xMin = min(max(zoneRect.minX + 8, xMinRaw), zoneRect.maxX - 8)
-        let xMax = min(max(zoneRect.minX + 8, xMaxRaw), zoneRect.maxX - 8)
+        let safeRect = bankRect.insetBy(dx: max(12, sidePadding + bankSafeExtra * 0.55), dy: 0)
 
-        let minYRaw: CGFloat = bottomPadding + 110
-        let maxYRaw: CGFloat = (bank == .left) ? (h * 0.58) : (h * 0.50)
+        let cols = 3
+        let rows = 3
+        let cells = cols * rows
 
-        let yMin = min(minYRaw, maxYRaw)
-        let yMax = max(minYRaw, maxYRaw)
+        let layer = indexInBank / cells
+        let idxInLayer = indexInBank % cells
 
-        let safeYMin = max(zoneRect.minY + 8, yMin)
-        let safeYMax = min(zoneRect.maxY - 8, yMax)
+        let permutedCell = (idxInLayer * 7) % cells
+        let col = permutedCell % cols
+        let row = permutedCell / cols
 
-        let finalYMin = min(safeYMin, safeYMax)
-        let finalYMax = max(safeYMin, safeYMax)
+        let usableW = max(1, safeRect.width)
+        let usableH = max(1, maxY - minY)
 
-        let indexYOffset: CGFloat = (indexInBank % 2 == 0) ? -24 : 26
+        let colStep = usableW / CGFloat(cols + 1)
+        let rowStep = usableH / CGFloat(rows + 1)
 
-        var best = CGPoint(x: (xMin + xMax) / 2, y: (finalYMin + finalYMax) / 2)
+        let baseX = safeRect.minX + colStep * CGFloat(col + 1)
+        let baseY = minY + rowStep * CGFloat(row + 1)
+
+        let ring = min(layer, 6)
+        let angle = CGFloat((layer * 97 + permutedCell * 31) % 360) * (.pi / 180)
+
+        let ringX = CGFloat(ring) * (colStep * 0.38) * cos(angle)
+        let ringY = CGFloat(ring) * (rowStep * 0.34) * sin(angle)
+
+        let targetMinDistance = max(minDistance, min(colStep, rowStep) * 0.72)
+
+        var bestPosition = CGPoint(x: baseX, y: baseY)
         var bestScore: CGFloat = -1
 
-        let attempts = 30
+        let attempts = 60
         for _ in 0..<attempts {
-            let loX = min(xMin, xMax)
-            let hiX = max(xMin, xMax)
 
-            let x = (hiX - loX < 1) ? loX : rng.nextCGFloat(in: loX...hiX)
+            var x = baseX + ringX + rng.nextCGFloat(in: -colStep * 0.28...colStep * 0.28)
+            var y = baseY + ringY + rng.nextCGFloat(in: -rowStep * 0.30...rowStep * 0.30) + rng.nextCGFloat(in: -rowJitter...rowJitter)
 
-            let yBase: CGFloat
-            if finalYMax - finalYMin < 1 {
-                yBase = finalYMin
-            } else {
-                yBase = rng.nextCGFloat(in: finalYMin...finalYMax)
-            }
-
-            let yJitter = rng.nextCGFloat(in: -40...40)
-            let y = max(finalYMin, min(finalYMax, yBase + yJitter + indexYOffset))
+            x = max(safeRect.minX + 10, min(x, safeRect.maxX - 10))
+            y = max(minY + 10, min(y, maxY - 10))
 
             let p = CGPoint(x: x, y: y)
+
+            if existing.isEmpty { return p }
 
             var minD2: CGFloat = .greatestFiniteMagnitude
             for e in existing {
@@ -539,28 +553,18 @@ final class GameScene: SKScene {
                 if d2 < minD2 { minD2 = d2 }
             }
 
-            if existing.isEmpty {
-                best = p
-                bestScore = 1
-                break
-            }
-
-            if minD2 >= minDistance * minDistance {
-                best = p
-                bestScore = minD2
-                break
-            }
+            if minD2 >= targetMinDistance * targetMinDistance { return p }
 
             if minD2 > bestScore {
                 bestScore = minD2
-                best = p
+                bestPosition = p
             }
         }
 
-        return best
+        return bestPosition
     }
 
-    // MARK: - Movement helper
+    
     private func moveNode(_ node: SKNode, to target: CGPoint, animated: Bool) {
         let duration = animated ? characterMoveDuration : 0
 
@@ -583,7 +587,6 @@ final class GameScene: SKScene {
         node.run(move, withKey: "move")
     }
 
-    // MARK: - Facing on islands ONLY
     private func ensureFacingOnIsland(node: SKSpriteNode, bank: BankSide) {
         let shouldFaceRight = (bank == .left)
 
@@ -602,12 +605,8 @@ final class GameScene: SKScene {
         }
     }
 
-    // MARK: - Touch handling
-
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        // ✅ Пока лодка плывёт — НИКАКИХ действий (иначе хиттесты/зоны будут “прыгать”)
         guard !isBoatSailing else { return }
-
         guard viewModel != nil else { return }
         guard let touch = touches.first else { return }
 
@@ -651,9 +650,7 @@ final class GameScene: SKScene {
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        // ✅ Пока лодка плывёт — нельзя ни грузить/выгружать, ни тапать “sail”
         guard !isBoatSailing else { return }
-
         guard let vm = viewModel else { return }
         guard let touch = touches.first else { return }
 
@@ -698,7 +695,6 @@ final class GameScene: SKScene {
                             return
                         }
 
-                        // ✅ слот назначится в updateBoatSlots(state:) после sync
                         vm.loadToBoat(objectId: id)
                         return
                     }
@@ -737,7 +733,6 @@ final class GameScene: SKScene {
         }
     }
 
-    // MARK: - Drag return
     private func returnDraggedNode(_ node: SKSpriteNode, fallbackId: UUID) {
         node.removeAction(forKey: "drag_return")
 
@@ -761,7 +756,6 @@ final class GameScene: SKScene {
         }
     }
 
-    // MARK: - Drop targets
     private enum DropTarget {
         case leftBank
         case rightBank
@@ -791,7 +785,6 @@ final class GameScene: SKScene {
         return boatZone.contains(pt)
     }
 
-    // MARK: - Reset for new level
     func resetForNewLevel() {
         guard let vm = viewModel else { return }
 
@@ -803,8 +796,7 @@ final class GameScene: SKScene {
             node.removeAction(forKey: "drag_return")
         }
 
-        cachedLeftBankPos.removeAll()
-        cachedRightBankPos.removeAll()
+        invalidateCachedBankPositions()
         boatSlotById.removeAll()
 
         isDragging = false
@@ -824,7 +816,6 @@ final class GameScene: SKScene {
         applyState(vm.state, level: vm.level, animated: false)
     }
 
-    // MARK: - Deterministic seed helpers
     private func stableSeed(levelIndex: Int, id: UUID) -> UInt64 {
         var h: UInt64 = 1469598103934665603
         h = fnvMix(h, UInt64(levelIndex))

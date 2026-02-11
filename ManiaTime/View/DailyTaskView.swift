@@ -1,4 +1,3 @@
-
 import SwiftUI
 
 struct DailyTaskView: View {
@@ -13,7 +12,6 @@ struct DailyTaskView: View {
     private var completedToday: Int { ps.dailyCompletedLevelsCount }
     private var isTask1Done: Bool { completedToday >= 1 }
     private var isTask2Done: Bool { completedToday >= 5 }
-
     private var canClaim: Bool { isTask2Done }
 
     var body: some View {
@@ -50,31 +48,38 @@ struct DailyTaskView: View {
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                             }
                             .overlay(alignment: .bottom) {
-                                Button {
-                                    onClaim()
-                                } label: {
-                                    Image(.getBtn)
-                                        .resizable()
-                                        .scaledToFit()
-                                        .frame(maxHeight: 50)
-                                        .offset(y: 25)
-                                        .opacity(canClaim ? 1.0 : 0)
+                                HStack(spacing: 20) {
+
+                                    Button {
+                                        ps.closeDailyHub()
+                                    } label: {
+                                        Image(.playBtn)
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(maxHeight: 50)
+                                    }
+                                    .buttonStyle(.plain)
+
+                                    if canClaim {
+                                        Button {
+                                            onClaim()
+                                        } label: {
+                                            Image(.getBtn)
+                                                .resizable()
+                                                .scaledToFit()
+                                                .frame(maxHeight: 50)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
                                 }
-                                .buttonStyle(.plain)
-                                .disabled(!canClaim)
+                                .offset(y: 25)
                             }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                 }
             },
             leftTop: {
-                Button {
-                    ps.closeDailyHub()
-                } label: {
-                    Image(.homeBtn)
-                }
-                .buttonStyle(.plain)
-                .padding(.leading, 12)
+                EmptyView()
             },
             rightTop: {
                 BankCountBadge(
@@ -91,7 +96,6 @@ struct DailyTaskView: View {
         .ignoresSafeArea()
     }
 }
-
 #Preview {
     DailyTaskView(
         coins: 10,

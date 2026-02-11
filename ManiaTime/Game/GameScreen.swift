@@ -9,6 +9,10 @@ struct GameScreen: View {
     @StateObject private var vm: GameViewModel
     @State private var scene: GameScene? = nil
 
+    private var hasNextLevel: Bool {
+        vm.level.index < ps.totalLevels
+    }
+
     init(levelIndex: Int) {
         let packs = LevelFactory.makeAllLevelPacks()
         let safe = max(1, min(levelIndex, packs.count))
@@ -46,31 +50,58 @@ struct GameScreen: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea()
             .onAppear {
+                let insets = UIEdgeInsets(
+                    top: geo.safeAreaInsets.top,
+                    left: geo.safeAreaInsets.leading,
+                    bottom: geo.safeAreaInsets.bottom,
+                    right: geo.safeAreaInsets.trailing
+                )
+
+                let hudTopReserved: CGFloat = 90
+                let hudBottomReserved: CGFloat = 110
+
                 if scene == nil {
                     DispatchQueue.main.async {
                         let newScene = GameScene(size: geo.size, viewModel: vm)
                         newScene.scaleMode = .resizeFill
                         newScene.debugShowZones = false
+                        newScene.updateSafeArea(insets)
+                        newScene.updateHUDInsets(top: hudTopReserved, bottom: hudBottomReserved)
                         scene = newScene
                         newScene.sync()
                     }
                 } else {
+                    scene?.updateSafeArea(insets)
+                    scene?.updateHUDInsets(top: hudTopReserved, bottom: hudBottomReserved)
                     scene?.size = geo.size
                     scene?.scaleMode = .resizeFill
                     scene?.sync()
                 }
 
                 vm.startLevel()
-                MusicManager.shared.play(scene: .game)
-            }
-            .onDisappear {
-                MusicManager.shared.play(scene: .menu)
+                MusicManager.shared.play(scene: .game, forceRestart: true)
             }
             .onChange(of: geo.size) { newSize in
+                let insets = UIEdgeInsets(
+                    top: geo.safeAreaInsets.top,
+                    left: geo.safeAreaInsets.leading,
+                    bottom: geo.safeAreaInsets.bottom,
+                    right: geo.safeAreaInsets.trailing
+                )
+
+                let hudTopReserved: CGFloat = 90
+                let hudBottomReserved: CGFloat = 110
+
+                scene?.updateSafeArea(insets)
+                scene?.updateHUDInsets(top: hudTopReserved, bottom: hudBottomReserved)
                 scene?.size = newSize
                 scene?.scaleMode = .resizeFill
                 scene?.sync()
             }
+            .onDisappear {
+                MusicManager.shared.play(scene: .menu, forceRestart: true)
+            }
+
             .onChange(of: vm.state) { _ in
                 scene?.sync()
             }
@@ -80,8 +111,7 @@ struct GameScreen: View {
             }
             .onChange(of: vm.levelResult) { result in
                 guard let result, vm.isWin else { return }
-                let currentLevel = vm.level.index
-                ps.onWinIfPossible(levelIndex: currentLevel, levelResult: result)
+                ps.onWinIfPossible(levelIndex: vm.level.index, levelResult: result)
             }
         }
         .ignoresSafeArea()
@@ -169,7 +199,7 @@ struct GameScreen: View {
                         .padding(.top, 10)
                     }
 
-                VStack(spacing: 12) {
+                VStack(spacing: 4) {
                     Button { vm.restartLevel() } label: { Image("retryBtn") }
                         .buttonStyle(.plain)
 
@@ -203,19 +233,26 @@ struct GameScreen: View {
                         .padding(.top, 10)
                     }
 
-                VStack(spacing: 12) {
+                VStack(spacing: 4) {
                     Button { vm.restartLevel() } label: { Image("retryBtn") }
                         .buttonStyle(.plain)
 
-                    Button { dismiss() } label: { Image("menuBtn") }
-                        .buttonStyle(.plain)
+                    Button {
+                        if hasNextLevel {
+                            vm.nextLevel()
+                        } else {
+                            dismiss()
+                        }
+                    } label: {
+                        Image("nextBtn")
+                    }
+                    .buttonStyle(.plain)
                 }
                 .offset(y: -24)
             }
         }
     }
 }
-
 
 struct BankCountBadge: View {
 

@@ -36,10 +36,13 @@ struct MainMenu: View {
                         } label: {
                             Image(.achBtn).resizable().scaledToFit().frame(maxWidth: 360)
                         }
+                        
                     }
                     Spacer()
                 }
+                .padding(.bottom, 24)
             }
+                
         )
         .fullScreenCover(isPresented: $showHub) {
             DailyHubView()
@@ -54,6 +57,7 @@ struct MainMenu: View {
                 .environmentObject(ps)
         }
         .onAppear {
+            OrientationManager.shared.forceLandscape()
             MusicManager.shared.play(scene: .menu)
             ps.onAppLaunch()
         }
