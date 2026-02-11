@@ -233,6 +233,7 @@ struct LevelsView: View {
                 }
             }
         )
+        
         .fullScreenCover(isPresented: startGameBinding) {
             GameScreen(levelIndex: ps.selectedLevel)
                 .environmentObject(ps)

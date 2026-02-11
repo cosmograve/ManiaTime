@@ -14,14 +14,16 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             MainMenu()
+                .preferredColorScheme(.light)
                 .ignoresSafeArea()
                 .environmentObject(ps)
                 .environmentObject(settings)
+                .onAppear {
+                    OrientationManager.shared.forceLandscape()
+                    MusicManager.shared.play(scene: .menu)
+                    ps.onAppLaunch()
+                }
             
-        }
-        .onAppear {
-            MusicManager.shared.play(scene: .menu)
-            ps.onAppLaunch()
         }
         .onChange(of: scenePhase) { phase in
             switch phase {
@@ -33,9 +35,8 @@ struct ContentView: View {
                 break
             }
         }
+        
     }
-    
-    
 }
 
 #Preview {

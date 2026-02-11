@@ -3,6 +3,7 @@ import SwiftUI
 struct MainMenu: View {
     @EnvironmentObject private var ps: ProgressStore
     @EnvironmentObject private var ss: SettingStore
+    
     @State private var showHub = false
     @State private var showSet = false
     @State private var showAch = false
@@ -57,7 +58,6 @@ struct MainMenu: View {
                 .environmentObject(ps)
         }
         .onAppear {
-            OrientationManager.shared.forceLandscape()
             MusicManager.shared.play(scene: .menu)
             ps.onAppLaunch()
         }

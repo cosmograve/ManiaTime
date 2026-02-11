@@ -114,6 +114,7 @@ struct GameScreen: View {
                 ps.onWinIfPossible(levelIndex: vm.level.index, levelResult: result)
             }
         }
+        .statusBarHidden(true)
         .ignoresSafeArea()
     }
 
